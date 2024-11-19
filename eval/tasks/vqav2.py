@@ -39,7 +39,8 @@ class VQAv2(HuggingFaceEval):
 
     def load_eval(self):
         try:
-            dataset = load_dataset(self.dataset_name, split=self.dataset_split, trust_remote_code=True)
+            dataset = load_dataset(self.dataset_name, split=self.dataset_split, trust_remote_code=True, cache_dir="/nm/drive1/shubhra/huggingface/datasets/")
+            #dataset = load_dataset(self.dataset_name, split=self.dataset_split, trust_remote_code=True, cache_dir="/nm/drive1/shubhra/huggingface/datasets/").select(range(20)) 
             for row in dataset:
                 self.interactions.append(self._to_interaction(row))
         except ValueError as e:

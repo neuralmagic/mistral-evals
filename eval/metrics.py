@@ -33,7 +33,6 @@ class Metric:
     def score(self, model_answer: str, reference_answer: str | list[str]) -> float:
         raise NotImplementedError
 
-
 class VQAMatch(Metric):
     """VQA match metric which gives partial score if less than 3 answers are matched."""
 
@@ -42,15 +41,25 @@ class VQAMatch(Metric):
         return "vqa_match"
 
     def score(self, model_answer: str, reference_answer: str | list[str]) -> float:
+        # Ensure reference_answer is a list
         if not isinstance(reference_answer, list):
             reference_answer = [reference_answer]
-        normalize_response_text: str = _normalize_string(model_answer)
-        matching_answers = [
-            answer
-            for answer in reference_answer
-            if _normalize_string(answer) == normalize_response_text
-        ]
-        return min(1.0, float(len(matching_answers)) / 3)
+
+        # Normalize the model answer once
+        normalized_model_answer = _normalize_string(model_answer)
+
+        # Precompute normalized reference answers
+        normalized_answers = set(
+            _normalize_string(ans['answer']) if isinstance(ans, dict) else _normalize_string(ans)
+            for ans in reference_answer
+        )
+
+        # Check for matches
+        match_count = sum(1 for ans in normalized_answers if ans == normalized_model_answer)
+
+        # Return partial score based on match count
+        return min(1.0, float(match_count) / 3)
+
 
 
 class ANLS(Metric):
