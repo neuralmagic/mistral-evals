@@ -38,13 +38,10 @@ class VQAv2(HuggingFaceEval):
         return [VQAMatch()]
 
     def load_eval(self):
-        try:
-            dataset = load_dataset(self.dataset_name, split=self.dataset_split, trust_remote_code=True, cache_dir="/nm/drive1/shubhra/huggingface/datasets/")
-            #dataset = load_dataset(self.dataset_name, split=self.dataset_split, trust_remote_code=True, cache_dir="/nm/drive1/shubhra/huggingface/datasets/").select(range(20)) 
-            for row in dataset:
-                self.interactions.append(self._to_interaction(row))
-        except ValueError as e:
-            if "Repo card metadata block was not found" in str(e):
-                logging.warning("Metadata block not found. Proceeding with the dataset without metadata.")
-            else:
-                raise e
+        dataset = load_dataset(
+            self.dataset_name, split=self.dataset_split, trust_remote_code=True, 
+            cache_dir="/nm/drive1/shubhra/huggingface/datasets/"
+        ).select(range(1000))
+        for row in dataset:
+            self.interactions.append(self._to_interaction(row))
+
