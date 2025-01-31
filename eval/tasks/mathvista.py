@@ -24,32 +24,68 @@ class MathVista(HuggingFaceEval):
     dataset_name = "AI4Math/MathVista"
     dataset_split = "testmini"
 
+    # def _to_interaction(self, row: dict[str, Any]) -> Interaction:
+    #     image = row["decoded_image"]
+    #     question = row["query"]
+
+    #     if row["choices"]:
+    #         answer_index = row["choices"].index(row["answer"])
+    #         answer = chr(ord("A") + answer_index)
+    #     else:
+    #         answer = row["answer"]
+
+    #     return Interaction(
+    #         {
+    #             "temperature": 0.0,
+    #             "max_tokens": 2048,
+    #             "messages": [
+    #                 {
+    #                     "role": "user",
+    #                     "content": [
+    #                         {"type": "image", "image": image},
+    #                         {"type": "text", "text": question + "\n" + PROMPT},
+    #                     ],
+    #                 }
+    #             ],
+    #         },
+    #         reference_answer=answer,
+    #     )
+
     def _to_interaction(self, row: dict[str, Any]) -> Interaction:
-        image = row["decoded_image"]
-        question = row["query"]
+        try:
+            image = row["decoded_image"]
+            question = row["query"]
 
-        if row["choices"]:
-            answer_index = row["choices"].index(row["answer"])
-            answer = chr(ord("A") + answer_index)
-        else:
-            answer = row["answer"]
+            if row["choices"]:
+                answer_index = row["choices"].index(row["answer"])
+                answer = chr(ord("A") + answer_index)
+            else:
+                answer = row["answer"]
 
-        return Interaction(
-            {
-                "temperature": 0.0,
-                "max_tokens": 2048,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "image": image},
-                            {"type": "text", "text": question + "\n" + PROMPT},
-                        ],
-                    }
-                ],
-            },
-            reference_answer=answer,
-        )
+            interaction = Interaction(
+                {
+                    "temperature": 0.0,
+                    "max_tokens": 2048,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image", "image": image},
+                                {"type": "text", "text": question + "\n" + PROMPT},
+                            ],
+                        }
+                    ],
+                },
+                reference_answer=answer,
+            )
+
+            return interaction
+
+        except Exception as e:
+            print(f"Error converting row to Interaction: {e}")
+            print(f"Row data: {row}")
+            raise
+
 
     @property
     def metric_fns(self) -> list[Metric]:

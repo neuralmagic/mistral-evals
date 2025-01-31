@@ -55,11 +55,13 @@ class Eval(ABC):
 
     def get_responses(self, model: Model):
         """Queries model to get responses for each interaction."""
+        print(f"Total interactions: {len(self.interactions)}")  # Confirm number of samples
 
         futures: dict[Future, Interaction] = {}
         with ThreadPoolExecutor(max_workers=8) as executor:
-            for interaction in self.interactions:
+            for idx, interaction in enumerate(self.interactions):
                 request = copy.deepcopy(interaction.request)
+                print(f"Submitting interaction {idx+1}/{len(self.interactions)}")  # Track request submission
                 futures[executor.submit(model, request)] = interaction
 
             interactions_w_model_ans = []
@@ -69,26 +71,51 @@ class Eval(ABC):
                 desc="Querying model",
             ):
                 interaction = futures[future]
-                interaction.model_answer = future.result()
-                interactions_w_model_ans.append(interaction)
+                try:
+                    interaction.model_answer = future.result()
+                    print(f"Completed {self.interactions.index(interaction) + 1}: {interaction.model_answer}")
+                    interactions_w_model_ans.append(interaction)
+                except Exception as e:
+                    print(f"Error at {self.interactions.index(interaction) + 1}: {e}")
+                    print(f"Failed request: {interaction.request}")
+            
             self.interactions = interactions_w_model_ans
+
 
     def compute_metrics(self):
         """Computes metrics for each interaction."""
+        print(f"Computing metrics for {len(self.interactions)} interactions")  
+
         for interaction in tqdm(self.interactions):
-            for metric in self.metric_fns:
-                interaction.metrics[metric.name] = metric.score(
-                    interaction.model_answer, interaction.reference_answer
-                )
+            if interaction.model_answer is None:
+                print(f"Warning: Interaction missing model_answer! {interaction}")
+                # Set a default score for all metrics since the model did not answer
+                interaction.metrics = {metric.name: 0.0 for metric in self.metric_fns}  
+            else:
+                for metric in self.metric_fns:
+                    try:
+                        interaction.metrics[metric.name] = metric.score(
+                            interaction.model_answer, interaction.reference_answer
+                        )
+                    except Exception as e:
+                        print(f"Metric computation error for {metric.name}: {e}")
+                        print(f"Interaction data: {interaction}")
+
 
     def aggregate_metrics(self) -> dict[str, float]:
-        """Aggregates metrics across all the interactions."""
+        """Aggregates metrics across all interactions."""
         overall_metrics: dict[str, float] = {}
+
         for metric in self.metric_fns:
-            overall_metrics[metric.name] = np.mean(
-                [interaction.metrics[metric.name] for interaction in self.interactions]
-            )  # type: ignore
+            scores = [interaction.metrics.get(metric.name, float('nan')) for interaction in self.interactions]
+            if any(np.isnan(scores)):  # Check for NaNs
+                print(f"Warning: NaN detected in {metric.name} scores!")
+            
+            overall_metrics[metric.name] = np.nanmean(scores)  # Ignore NaNs
+
+        print(f"Final aggregated metrics: {overall_metrics}")
         return overall_metrics
+
 
 
 class HuggingFaceEval(Eval):
@@ -102,8 +129,17 @@ class HuggingFaceEval(Eval):
 
     def load_eval(self):
         """Loads dataset and applies transforms to get chat completion requests."""
-        for row in tqdm(
-            self.get_dataset(),
-            desc=f"Loading {self.dataset_name} [{self.dataset_split}]",
-        ):
-            self.interactions.append(self._to_interaction(row))
+        dataset = self.get_dataset()
+        print(f"Dataset size: {len(dataset)}")  # Check dataset size
+
+        for idx, row in enumerate(tqdm(dataset, desc=f"Loading {self.dataset_name} [{self.dataset_split}]")):
+            try:
+                interaction = self._to_interaction(row)
+                self.interactions.append(interaction)
+                if idx % 1000 == 0:  # Print every 1000 samples
+                    print(f"Loaded {idx+1} interactions successfully.")
+            except Exception as e:
+                print(f"Error at index {idx}: {e}")
+                print(f"Row causing issue: {row}")  # Print problematic row
+                break  # Stop if there's an issue
+
