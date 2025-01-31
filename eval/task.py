@@ -53,25 +53,60 @@ class Eval(ABC):
         """Loads dataset and applies transforms to get chat completion requests."""
         raise NotImplementedError
 
-    def get_responses(self, model: Model):
-        """Queries model to get responses for each interaction."""
+    # def get_responses(self, model: Model):
+    #     """Queries model to get responses for each interaction."""
 
+    #     futures: dict[Future, Interaction] = {}
+    #     with ThreadPoolExecutor(max_workers=8) as executor:
+    #         for interaction in self.interactions:
+    #             request = copy.deepcopy(interaction.request)
+    #             futures[executor.submit(model, request)] = interaction
+
+    #         interactions_w_model_ans = []
+    #         for future in tqdm(
+    #             as_completed(futures),
+    #             total=len(self.interactions),
+    #             desc="Querying model",
+    #         ):
+    #             interaction = futures[future]
+    #             interaction.model_answer = future.result()
+    #             interactions_w_model_ans.append(interaction)
+    #         self.interactions = interactions_w_model_ans
+    
+    def get_responses(self, model: Model):
+        """Queries model for a limited range of interactions."""
+        if not self.interactions:
+            print("No interactions loaded. Run `load_eval` first.")
+            return
+
+        failure_idx = int(0.67 * len(self.interactions))
+        start_idx = max(0, failure_idx - 10)
+        end_idx = min(len(self.interactions), failure_idx + 10)
+        
         futures: dict[Future, Interaction] = {}
         with ThreadPoolExecutor(max_workers=8) as executor:
-            for interaction in self.interactions:
+            for idx in range(start_idx, end_idx):
+                interaction = self.interactions[idx]
                 request = copy.deepcopy(interaction.request)
+                print(f"Processing interaction {idx + 1}/{len(self.interactions)}")
                 futures[executor.submit(model, request)] = interaction
 
             interactions_w_model_ans = []
             for future in tqdm(
                 as_completed(futures),
-                total=len(self.interactions),
-                desc="Querying model",
+                total=(end_idx - start_idx),
+                desc="Querying model subset",
             ):
                 interaction = futures[future]
-                interaction.model_answer = future.result()
-                interactions_w_model_ans.append(interaction)
+                try:
+                    interaction.model_answer = future.result()
+                    print(f"Completed {self.interactions.index(interaction) + 1}: {interaction.model_answer}")
+                    interactions_w_model_ans.append(interaction)
+                except Exception as e:
+                    print(f"Error at {self.interactions.index(interaction) + 1}: {e}")
+            
             self.interactions = interactions_w_model_ans
+
 
     def compute_metrics(self):
         """Computes metrics for each interaction."""
@@ -100,10 +135,29 @@ class HuggingFaceEval(Eval):
     def get_dataset(self):
         return load_dataset(self.dataset_name)[self.dataset_split]
 
+    # def load_eval(self):
+    #     """Loads dataset and applies transforms to get chat completion requests."""
+    #     for row in tqdm(
+    #         self.get_dataset(),
+    #         desc=f"Loading {self.dataset_name} [{self.dataset_split}]",
+    #     ):
+    #         self.interactions.append(self._to_interaction(row))
+
     def load_eval(self):
-        """Loads dataset and applies transforms to get chat completion requests."""
-        for row in tqdm(
-            self.get_dataset(),
-            desc=f"Loading {self.dataset_name} [{self.dataset_split}]",
-        ):
-            self.interactions.append(self._to_interaction(row))
+        """Loads only a subset of the dataset around the failure point."""
+        dataset = self.get_dataset()
+        failure_idx = int(0.67 * len(dataset))
+        start_idx = max(0, failure_idx - 10)
+        end_idx = min(len(dataset), failure_idx + 10)
+
+        for idx, row in enumerate(tqdm(
+            dataset.select(range(start_idx, end_idx)),
+            desc=f"Loading subset {start_idx} to {end_idx}",
+        )):
+            try:
+                interaction = self._to_interaction(row)
+                print(f"Loaded interaction {start_idx + idx}: {interaction.request}")
+                self.interactions.append(interaction)
+            except Exception as e:
+                print(f"Error loading interaction {start_idx + idx}: {e}")
+
