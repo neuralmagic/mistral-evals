@@ -42,8 +42,8 @@ class VQAv2(HuggingFaceEval):
         logging.basicConfig(level=logging.DEBUG)
 
         dataset = load_dataset(
-            self.dataset_name, split=self.dataset_split, trust_remote_code=True, 
-            data_dir="/network/shubhra/datasets/HuggingFaceM4/VQAv2/",
+            "/network/shubhra/datasets/HuggingFaceM4/VQAv2/"
+            split=self.dataset_split, trust_remote_code=True, 
         )
         for row in dataset:
             self.interactions.append(self._to_interaction(row))
