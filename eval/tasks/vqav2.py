@@ -38,9 +38,13 @@ class VQAv2(HuggingFaceEval):
         return [VQAMatch()]
 
     def load_eval(self):
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
+
         dataset = load_dataset(
             self.dataset_name, split=self.dataset_split, trust_remote_code=True, 
-            cache_dir="/network/shubhra/datasets/"
+            cache_dir="/network/shubhra/datasets/",
+            download_mode="force_local"
         )
         for row in dataset:
             self.interactions.append(self._to_interaction(row))
