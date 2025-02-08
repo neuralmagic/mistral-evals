@@ -43,8 +43,7 @@ class VQAv2(HuggingFaceEval):
 
         dataset = load_dataset(
             self.dataset_name, split=self.dataset_split, trust_remote_code=True, 
-            cache_dir="/network/shubhra/datasets/",
-            download_mode="force_local"
+            data_dir="/network/shubhra/datasets/",
         )
         for row in dataset:
             self.interactions.append(self._to_interaction(row))
