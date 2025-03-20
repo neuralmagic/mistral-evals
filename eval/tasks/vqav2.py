@@ -38,5 +38,10 @@ class VQAv2(HuggingFaceEval):
         return [VQAMatch()]
 
     def load_eval(self):
-        for row in load_dataset(self.dataset_name)[self.dataset_split]:
+        dataset = load_dataset(
+            "/network/shubhra/datasets/HuggingFaceM4/VQAv2/",
+            split=self.dataset_split, trust_remote_code=True, 
+        )
+        for row in dataset:
             self.interactions.append(self._to_interaction(row))
+

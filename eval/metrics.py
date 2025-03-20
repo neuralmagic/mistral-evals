@@ -1,7 +1,6 @@
 import re
 import string
 
-
 def _normalize_string(s):
     if (s.startswith('"') and s.endswith('"')) or (
         s.startswith("'") and s.endswith("'")
@@ -37,21 +36,106 @@ class Metric:
 class VQAMatch(Metric):
     """VQA match metric which gives partial score if less than 3 answers are matched."""
 
+    def __init__(self):
+        self.contractions = {"aint": "ain't", "arent": "aren't", "cant": "can't", "couldve": "could've", "couldnt": "couldn't", \
+                            "couldn'tve": "couldn't've", "couldnt've": "couldn't've", "didnt": "didn't", "doesnt": "doesn't", "dont": "don't", "hadnt": "hadn't", \
+                            "hadnt've": "hadn't've", "hadn'tve": "hadn't've", "hasnt": "hasn't", "havent": "haven't", "hed": "he'd", "hed've": "he'd've", \
+                            "he'dve": "he'd've", "hes": "he's", "howd": "how'd", "howll": "how'll", "hows": "how's", "Id've": "I'd've", "I'dve": "I'd've", \
+                            "Im": "I'm", "Ive": "I've", "isnt": "isn't", "itd": "it'd", "itd've": "it'd've", "it'dve": "it'd've", "itll": "it'll", "let's": "let's", \
+                            "maam": "ma'am", "mightnt": "mightn't", "mightnt've": "mightn't've", "mightn'tve": "mightn't've", "mightve": "might've", \
+                            "mustnt": "mustn't", "mustve": "must've", "neednt": "needn't", "notve": "not've", "oclock": "o'clock", "oughtnt": "oughtn't", \
+                            "ow's'at": "'ow's'at", "'ows'at": "'ow's'at", "'ow'sat": "'ow's'at", "shant": "shan't", "shed've": "she'd've", "she'dve": "she'd've", \
+                            "she's": "she's", "shouldve": "should've", "shouldnt": "shouldn't", "shouldnt've": "shouldn't've", "shouldn'tve": "shouldn't've", \
+                            "somebody'd": "somebodyd", "somebodyd've": "somebody'd've", "somebody'dve": "somebody'd've", "somebodyll": "somebody'll", \
+                            "somebodys": "somebody's", "someoned": "someone'd", "someoned've": "someone'd've", "someone'dve": "someone'd've", \
+                            "someonell": "someone'll", "someones": "someone's", "somethingd": "something'd", "somethingd've": "something'd've", \
+                            "something'dve": "something'd've", "somethingll": "something'll", "thats": "that's", "thered": "there'd", "thered've": "there'd've", \
+                            "there'dve": "there'd've", "therere": "there're", "theres": "there's", "theyd": "they'd", "theyd've": "they'd've", \
+                            "they'dve": "they'd've", "theyll": "they'll", "theyre": "they're", "theyve": "they've", "twas": "'twas", "wasnt": "wasn't", \
+                            "wed've": "we'd've", "we'dve": "we'd've", "weve": "we've", "werent": "weren't", "whatll": "what'll", "whatre": "what're", \
+                            "whats": "what's", "whatve": "what've", "whens": "when's", "whered": "where'd", "wheres": "where's", "whereve": "where've", \
+                            "whod": "who'd", "whod've": "who'd've", "who'dve": "who'd've", "wholl": "who'll", "whos": "who's", "whove": "who've", "whyll": "why'll", \
+                            "whyre": "why're", "whys": "why's", "wont": "won't", "wouldve": "would've", "wouldnt": "wouldn't", "wouldnt've": "wouldn't've", \
+                            "wouldn'tve": "wouldn't've", "yall": "y'all", "yall'll": "y'all'll", "y'allll": "y'all'll", "yall'd've": "y'all'd've", \
+                            "y'alld've": "y'all'd've", "y'all'dve": "y'all'd've", "youd": "you'd", "youd've": "you'd've", "you'dve": "you'd've", \
+                            "youll": "you'll", "youre": "you're", "youve": "you've"}
+        self.articles     = ['a',
+                            'an',
+                            'the'
+                            ]
+
+        self.periodStrip = re.compile(r'(?<!\d)\.(?!\d)')  # Matches periods not part of decimal numbers
+        self.commaStrip = re.compile(r"(\d)(\,)(\d)")
+        self.punct = [';', r"/", '[', ']', '"', '{', '}',
+                      '(', ')', '=', '+', '\\', '_', '-',
+                      '>', '<', '@', '`', ',', '?', '!']
+
+
     @property
     def name(self) -> str:
         return "vqa_match"
+    
+    def clean_text(self, text: str) -> str:
+        """
+        Cleans input text by:
+        1. Removing punctuation except periods in decimal numbers.
+        2. Removing commas in digit sequences.
+        3. Replacing contractions.
+        4. Removing articles.
+        """
+        # Remove commas in digit sequences (e.g., 1,000 -> 1000)
+        text = self.commaStrip.sub(r'\1\3', text)
+
+        # Replace punctuations with spaces or remove them
+        for p in self.punct:
+            if (p + ' ' in text or ' ' + p in text) or re.search(self.commaStrip, text):
+                text = text.replace(p, '')
+            else:
+                text = text.replace(p, ' ')
+
+        # Remove periods that are not part of decimal numbers
+        text = self.periodStrip.sub('', text)
+
+        # Handle contractions and remove articles
+        words = text.split()
+        cleaned_words = []
+        for word in words:
+            # Replace contractions
+            word = self.contractions[word] if word in self.contractions else word
+            # Exclude articles
+            if word not in self.articles:
+                cleaned_words.append(word)
+
+        return ' '.join(cleaned_words).strip()
 
     def score(self, model_answer: str, reference_answer: str | list[str]) -> float:
+        # Ensure reference_answer is a list
         if not isinstance(reference_answer, list):
             reference_answer = [reference_answer]
-        normalize_response_text: str = _normalize_string(model_answer)
-        matching_answers = [
-            answer
-            for answer in reference_answer
-            if _normalize_string(answer) == normalize_response_text
-        ]
-        return min(1.0, float(len(matching_answers)) / 3)
 
+        # Normalize the model answer
+        normalized_model_answer = _normalize_string(model_answer)
+
+        # Clean model answer
+        cleaned_model_answer = self.clean_text(
+            normalized_model_answer.replace('\n', ' ').replace('\t', ' ').strip().lower()
+        )
+
+        # Precompute normalized reference answers
+        normalized_answers = []
+        for ans in reference_answer:
+            ans_text = ans['answer'] if isinstance(ans, dict) else ans
+            cleaned_ans = self.clean_text(
+                ans_text.replace('\n', ' ').replace('\t', ' ').strip().lower()
+            )
+            normalized_answers.append(_normalize_string(cleaned_ans))
+        
+        # Find all matching answers (model answer vs reference answers)
+        matching_answers = [
+            answer for answer in normalized_answers if cleaned_model_answer == answer
+        ]
+        # Return the score based on matches (clamped to a max of 1.0)
+        return min(1.0, float(len(matching_answers)) / 3)
 
 class ANLS(Metric):
     @property
